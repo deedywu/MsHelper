@@ -1,0 +1,366 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wz查看 Web版</title>
+    <link rel="icon" type="image/png" sizes="16x16" href="Icon.ico">
+    <link rel="stylesheet" href="lib/css/mdui.css"/>
+    <script src="lib/js/jquery.min.js"></script>
+    <script src="lib/js/jquery.cookie.js"></script>
+    <script src="lib/js/mdui.js"></script>
+    <style>
+
+        .mdui-panel-item-summary {
+            width: 33%;
+        }
+
+    </style>
+</head>
+<body class="mdui-color-theme">
+<!-- 设置栏 Settings -->
+<div class="mdui-container mdui-theme-primary-blue"
+     style="position:fixed;background: white;z-index: 9999;width: 100%;max-width: 100%;">
+    <div class="mdui-panel mdui-panel-gapless" id="panel">
+        <div class="mdui-panel-item">
+            <div class="mdui-panel-item-header" id="panel-header">
+                <div class="mdui-panel-item-title"><i class="mdui-icon material-icons">settings</i> 配置</div>
+                <div class="mdui-panel-item-summary">
+                    路径: <span id="dir_path_t" class="mdui-text-color-red-500"></span>
+                    版本: <span id="other_t" class="mdui-text-color-red-500"></span></div>
+                <div class="mdui-panel-item-summary">
+                    <div id="wait-select"></div>
+                </div>
+                <i class="mdui-panel-item-arrow mdui-icon material-icons">keyboard_arrow_down</i>
+            </div>
+            <div class="mdui-panel-item-body">
+                <form id="form">
+                    <div class="mdui-textfield mdui-textfield-floating-label">
+                        <label class="mdui-textfield-label">文件夹物理路径(如 E:/GAMES/WZFILE)</label>
+                        <input class="mdui-textfield-input" value="D:\games\C079" type="text" id="dir_path"/>
+                    </div>
+                    <select class="mdui-select" id="maple_ver">
+                        <option value="1">Global MapleStory (旧)</option>
+                        <option value="2" selected>新楓之谷 / 冒险岛Online / 메이플스토리 / MapleSEA/ EMS(旧)</option>
+                        <option value="3">BMS / GMS / MapleSEA / メイプルストーリー / 메이플스토리</option>
+                    </select>
+                    <div class="mdui-textfield mdui-textfield-floating-label">
+                        <label class="mdui-textfield-label">version</label>
+                        <input class="mdui-textfield-input" type="number" value="79" id="version"/>
+                    </div>
+                </form>
+                <div class="mdui-panel-item-actions">
+                    <a href="javascript:$('.mdui-panel-item-header').click()"
+                       class="mdui-btn mdui-ripple mdui-color-pink-accent">取消</a>
+                    <a href="javascript:loadInfo(1);" class="mdui-btn mdui-ripple mdui-color-blue">保存</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<br/>
+<div style="width: 100%;">
+    <div style="margin-top: 30px;">
+        <div class="mdui-tab mdui-tab-scrollable"
+             style="position:fixed;background: white;width: 100%;height: 50px;z-index: 9998;border-bottom: rgba(128, 128, 128, 0.4) solid 1px"
+             id="wz-tab-list">
+        </div>
+        <br/>
+        <div class="mdui-panel" id="wz-list" style="z-index: 9997;margin-top: 30px;">
+        </div>
+    </div>
+</div>
+<script>
+
+    const openedWz = [];
+
+    let wzSelectInst;
+
+    const panelInst = new mdui.Panel("#panel");
+
+    const tabInst = new mdui.Tab('#wz-tab-list');
+
+    $("#wait-select").click(function (e) {
+        e.stopPropagation();
+        panelInst.close(0);
+    });
+
+    window.onload = function () {
+        mdui.snackbar({
+            message: '提示:为避免文件被占用,请连同文件夹复制一份wz文件单独使用!',
+            position: 'bottom',
+            timeout: 2000
+        });
+        const path = $.cookie("path");
+        const version = $.cookie("version");
+        const mv = $.cookie("mv");
+        if (path) $("#dir_path").val(path);
+        if (version) $("#version").val(version);
+        if (mv) $("#maple_ver").val(mv);
+        loadInfo();
+    }
+
+    function loadInfo(val) {
+        const path = $("#dir_path").val();
+        $("#dir_path_t").text(path);
+        let info = "";
+        const mv = $("#maple_ver").val();
+        switch (mv) {
+            case '1':
+                info = "GMS";
+                break;
+            case '2':
+                info = "EMS";
+                break;
+            case '3':
+                info = "BMS";
+                break;
+        }
+        const version = $("#version").val();
+        $("#other_t").text(`${info} ${version}`);
+        if (val === 1) $('.mdui-panel-item-header').click();
+        if (val && $.cookie("path") === path && $.cookie("version") === version && $.cookie("mv") === mv) return;
+        $.get("wz/getList", {path}, function (result) {
+            mdui.snackbar({
+                message: result.msg,
+                position: 'bottom',
+                timeout: 500
+            });
+            if (result.code === 200 && result.data) {
+                let str = `选择wz文件: <select class="mdui-select" id="wz-select"><option value="0">请选择wz文件</option>`;
+                for (const key in result.data) {
+                    const wzName = result.data[key];
+                    str += `<option value="${wzName}">${wzName}</option>`;
+                }
+                str += `</select>`;
+                $("#wait-select").html(str);
+                $.cookie("path", path);
+                $.cookie("version", version);
+                $.cookie("mv", mv);
+                wzSelectInst = new mdui.Select("wait-select");
+                wzSelectInst.handleUpdate();
+                $('#wz-select').on('change', function () {
+                    const filename = $("#wz-select").val();
+                    const id = filename.replace(".wz", "") + "-tab";
+                    if (openedWz.indexOf(filename) < 0) {
+                        $.get("wz/wzFile", {path, filename, version, mv}, function (result2) {
+                            mdui.snackbar({
+                                message: result2.msg,
+                                position: 'bottom',
+                                timeout: 500
+                            });
+                            if (result2.code === 200 && result2.data) {
+                                $("#wz-tab-list").append(`<a href="#${id}" id="${id}c" class="mdui-ripple">${filename}</a>`);
+                                tabInst.handleUpdate();
+                                $("#wz-list").append(`<div id="${id}" class="mdui-p-a-2"><div class="mdui-panel" mdui-panel id="${id}z"></div></div>`);
+                                appendPanel(`${id}z`, {name: filename, type: 1, path, version, mv})
+                                for (const key in result2.data.img) {
+                                    const tmp = result2.data.img[key];
+                                    appendPanel(`${id}z`, {name: tmp, type: 3, path: filename});
+                                }
+                                for (const key in result2.data.dir) {
+                                    const tmp = result2.data.dir[key];
+                                    appendPanel(`${id}z`, {name: tmp, type: 2, path: filename});
+                                }
+                                mdui.mutation();
+                                tabInst.$tabs[(tabInst.$tabs.length - 1)].click();
+                                return;
+                            }
+                        })
+                    } else {
+                        for (const key in tabInst.$tabs) {
+                            const tmp = tabInst.$tabs[key];
+                            if (tmp.id === `${id}c`) {
+                                tmp.click();
+                                return;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    function openWz(filename, path, zid) {
+        $.get("wz/wzObj", {filename, path}, function (result) {
+            mdui.snackbar({
+                message: result.msg,
+                position: 'bottom',
+                timeout: 500
+            });
+            if (result.code === 200) {
+                $(`#${zid}`).parent().append(`<div id="${zid}1" class="mdui-p-a-2"><div class="mdui-panel" mdui-panel id="${zid}1z"></div></div>`);
+                for (const key in result.data.property) {
+                    const tmp = result.data.property[key];
+                    appendPanel(`${zid}1z`, {name: key, type: 4, type2: tmp, path: filename + "/" + path});
+                }
+                for (const key in result.data.img) {
+                    const tmp = result.data.img[key];
+                    appendPanel(`${zid}1z`, {name: tmp, type: 3, path: filename + "/" + path});
+                }
+                for (const key in result.data.dir) {
+                    const tmp = result.data.dir[key];
+                    appendPanel(`${zid}1z`, {name: tmp, type: 2, path: filename + "/" + path});
+                }
+                mdui.mutation();
+                $(`#${zid}`).remove();
+            }
+        })
+    }
+
+    let audios;
+
+    function appendPanel(id, data) {
+        let str = "";
+        const openWzAfter = [];
+        // Wz File
+        if (data.type === 1) {
+            let verInfo = "";
+            switch (data.mv) {
+                case '1':
+                    verInfo = "Global MapleStory (旧)";
+                    break;
+                case '2':
+                    verInfo = "新楓之谷 / 冒险岛Online / 메이플스토리 / MapleSEA/ EMS(旧)";
+                    break;
+                case '3':
+                    verInfo = "BMS / GMS / MapleSEA / メイプルストーリー / 메이플스토리";
+                    break;
+            }
+            verInfo += `    (${+data.version < 100 ? '0' + data.version : data.version})`;
+            str = `<div class="mdui-panel-item">` +
+                `<div class="mdui-panel-item-header" onclick="clickEmpty()"><div class="mdui-panel-item-title">` +
+                `<i class="mdui-icon material-icons">library_books</i>${data.path + "\\" + data.name}</div>` +
+                `<div class="mdui-panel-item-summary"></div><div class="mdui-panel-item-summary">${verInfo}</div>` +
+                `</div></div>`;
+            // Wz Directory & Wz Image
+        } else if (data.type === 2 || data.type === 3) {
+            const zid = replaceFullPath(data.path + "\\" + data.name);
+            let levelType, btnName = '打开', icon;
+            if (data.type === 2) {
+                levelType = 'WzDirectory';
+                btnName += '文件夹 (Open Directory)';
+                icon = 'folder';
+            } else if (data.type === 3) {
+                levelType = 'WzImage';
+                btnName += 'IMG (Open Image)';
+                icon = 'image_aspect_ratio';
+            }
+            str = `<div class="mdui-panel-item">` +
+                `<div class="mdui-panel-item-header"><div class="mdui-panel-item-title">` +
+                `<i class="mdui-icon material-icons">${icon}</i>${data.name}</div><div class="mdui-panel-item-summary"></div>` +
+                `<div class="mdui-panel-item-summary"><span class="mdui-text-color-blue-500">${levelType}</span> ${data.path + "/" + data.name}</div>` +
+                `</div>` +
+                `<div class="mdui-panel-item-body">` +
+                `<p><div class="mdui-col">` +
+                `<a href="javascript:openWz('${data.path}','${data.name}','${zid}')" id="${zid}" ` +
+                `class="mdui-btn mdui-btn-block mdui-color-theme-accent mdui-ripple mdui-color-blue">${btnName}</a></div></p>` +
+                `</div></div>`;
+        } else if (data.type === 4) { // Wz Properties
+            const zid = replaceFullPath(data.path + "\\" + data.name);
+            let icon = "remove_circle_outline", openBtn = true, hasBody = true;
+            let showP, showS = `<div class="mdui-panel-item-summary"></div>`;
+            switch (data.type2.type) {
+                case  'SubProperty':
+                    icon = "reorder";
+                    showP = `<a href="javascript:openWz('${data.path}','${data.name}','${zid}')" id="${zid}"` +
+                        ` class="mdui-btn mdui-btn-block mdui-color-theme-accent mdui-ripple mdui-color-blue">打开子属性 (OPEN PROPERTY)</a>`;
+                    break;
+                case  'Canvas':
+                    icon = "image";
+                    openBtn = false;
+                    showP = `宽(width):<span class="mdui-text-color-red-500">${data.type2.width}</span> ` +
+                        `高(height):<span class="mdui-text-color-red-500">${data.type2.height}</span>` +
+                        `&nbsp;&nbsp;&nbsp;<a href="javascript:reloadSrc('${zid}i','${data.type2.value}')"` +
+                        ` class="mdui-btn  mdui-color-theme-accent mdui-ripple mdui-color-pink-500">刷新图片(RELOAD IMAGE)</a><hr/>` +
+                        `<img src="wz/getImg?id=${data.type2.value}&t=${new Date().getTime()}" alt="${data.type2.width}*${data.type2.height}" id="${zid}i"/>` +
+                        `<a href="javascript:openWz('${data.path}','${data.name}','${zid}')" id="${zid}"` +
+                        ` class="mdui-btn mdui-btn-block mdui-color-theme-accent mdui-ripple mdui-color-blue">打开子属性 (OPEN PROPERTY)</a>`;
+                    openWzAfter.push(data.path);
+                    openWzAfter.push(data.name);
+                    openWzAfter.push(zid);
+                    break;
+                case  'Float':
+                case  'Double':
+                case  'Short':
+                case  'Int':
+                case  'Long':
+                    icon = "format_list_numbered";
+                    openBtn = false;
+                    hasBody = false;
+                    showS = `<div class="mdui-panel-item-summary"><span class="mdui-text-color-red-500">${data.type2.value}</span></div>`;
+                    break;
+                case  'String':
+                    icon = "chat";
+                    openBtn = false;
+                    hasBody = false;
+                    showS = `<div class="mdui-panel-item-summary"><span class="mdui-text-color-red-500"><span class="mdui-text-color-red-500">${data.type2.value}</span></div>`;
+                    break;
+                case  'Sound':
+                    icon = "audiotrack";
+                    openBtn = false;
+                    hasBody = false;
+                    showS = `<div class="mdui-panel-item-summary"><span class="mdui-text-color-red-500"><audio controls="controls" src="data:audio/wav;base64,${data.type2.value}"></audio></div>`;
+                    break;
+                case  'Uol':
+                    icon = "insert_link";
+                    openBtn = false;
+                    hasBody = false;
+                    showS = `<div class="mdui-panel-item-summary"><span class="mdui-text-color-red-500"><span class="mdui-text-color-red-500">${data.type2.value}</span></div>`;
+                    break;
+                case  'Vector':
+                    console.log(data.type2)
+                    icon = "room";
+                    openBtn = false;
+                    hasBody = false;
+                    showS = `<div class="mdui-panel-item-summary">` +
+                        `X: <span class="mdui-text-color-red-500">${data.type2.value.x} </span>` +
+                        `Y: <span class="mdui-text-color-red-500">${data.type2.value.y}</span></div>`;
+                    break;
+            }
+            str = `<div class="mdui-panel-item">` +
+                `<div class="mdui-panel-item-header"><div class="mdui-panel-item-title">` +
+                `<i class="mdui-icon material-icons">${icon}</i>${data.name}</div>` + showS +
+                `<div class="mdui-panel-item-summary"><span class="mdui-text-color-blue-500">${data.type2.type}</span> ${data.path + "/" + data.name}</div>` +
+                `</div>`;
+            if (hasBody) str += `<div class="mdui-panel-item-body"><p><div class="mdui-col">` + showP + `</div></p></div></div>`;
+        }
+        if (data.parent)
+            $(`#${id}`).parent().append(str);
+        else
+            $(`#${id}`).append(str);
+        if (openWzAfter.length > 0) {
+            openWz(openWzAfter[0], openWzAfter[1], openWzAfter[2]);
+        }
+        audios = document.getElementsByTagName("audio");
+
+        function pauseAll() {
+            const self = this;
+            [].forEach.call(audios, function (i) {
+                i !== self && i.pause();
+            })
+        }
+
+        [].forEach.call(audios, function (i) {
+            i.addEventListener("play", pauseAll.bind(i));
+        })
+    }
+
+    function reloadSrc(zid, id) {
+        $(`#${zid}`).attr("src", `wz/getImg?id=${id}&t=${new Date().getTime()}`);
+    }
+
+    function replaceFullPath(str) {
+        while (str.indexOf('.') > 0) str = str.replace(".", "_");
+        while (str.indexOf("/") > 0) str = str.replace("/", "_");
+        while (str.indexOf("\\") > 0) str = str.replace("\\", "_");
+        return str;
+    }
+
+    function clickEmpty(e) {
+        return false;
+    }
+
+</script>
+
+</body>
+</html>

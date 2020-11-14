@@ -1,0 +1,7 @@
+/.idea/
+/MsHelper/bin/
+/MsHelper/obj/
+gradlew
+gradlew.bat
+.DS_Store
+*.log
